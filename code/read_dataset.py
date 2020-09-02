@@ -21,6 +21,13 @@ from datanetAPI import DatanetAPI
 
 POLICIES = np.array(['WFQ', 'SP', 'DRR'])
 
+
+def policy(graph, node):
+    pol =   np.where(POLICIES==graph.nodes[node]['schedulingPolicy'])[0][0]
+    weight = graph.nodes[node]['schedulingWeights'].split(',') if (pol!=1) else  [200.,200.,200.]
+    #weight = g.nodes[node]['schedulingWeights'].split(',') if (pol!=1) else [0]  
+    return (pol, weight)
+
 def generator(data_dir, shuffle = False):
     """This function uses the provided API to read the data and returns
        and returns the different selected features.
@@ -47,7 +54,8 @@ def generator(data_dir, shuffle = False):
         #  EXTRACT PATHS  #
         ###################
         routing = sample.get_routing_matrix()
-
+        traffic = sample.get_traffic_matrix()
+        
         nodes = len(routing)
         # Remove diagonal from matrix
         paths = routing[~np.eye(routing.shape[0], dtype=bool)].reshape(routing.shape[0], -1)
@@ -58,42 +66,70 @@ def generator(data_dir, shuffle = False):
         ###################
         g = sample.get_topology_object()
 
-        cap_mat = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
-
+                    
+        cap_mat         = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
+        tx_queue_mat    = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
+        rx_queue_mat    = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
+        tx_weight_mat   = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
+        rx_weight_mat   = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None) 
+        #tx_port_mat   = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
+        
         for node in range(g.number_of_nodes()):
             for adj in g[node]:
-                cap_mat[node, adj] = g[node][adj][0]['bandwidth']
-
+                cap_mat[node, adj] = g[node][adj][0]['bandwidth']*1.E-5
+                #tx_port_mat[node, adj] = G[node][adj][0]['port']
+                #tx_policy = policy(g,node)
+                #rx_policy = policy(g,adj)
+                tx_queue_mat[node, adj] = policy(g,node)[0]
+                rx_queue_mat[node, adj] = policy(g,adj)[0]
+                tx_weight_mat[node, adj] = policy(g,node)[1]
+                rx_weight_mat[node, adj] = policy(g,adj)[1]
+                
         links = np.where(np.ravel(cap_mat) != None)[0].tolist()
-
         link_capacities = (np.ravel(cap_mat)[links]).tolist()
-
+        tx_policies       = (np.ravel(tx_queue_mat)[links]).tolist()
+        rx_policies       = (np.ravel(rx_queue_mat)[links]).tolist()
+        # tx_ports
+        
         ids = list(range(len(links)))
         links_id = dict(zip(links, ids))
 
         path_ids = []
+        weight_ids = []
+        pol_ids = []
         for path in paths:
+            tos = int(traffic[path[0],path[-1]]['Flows'][0]['ToS'])
             new_path = []
+            new_weight = []
             for i in range(0, len(path) - 1):
                 src = path[i]
                 dst = path[i + 1]
+                tx_pol    = tx_queue_mat[src][dst]
+                tx_weight = int(float(tx_weight_mat[src][dst][tos]))
+                if  tx_pol==1 :
+                    tx_weight -= tos*100                 
                 new_path.append(links_id[src * nodes + dst])
-            path_ids.append(new_path)
+                new_weight.append(tx_weight)
 
+            path_ids.append(new_path)
+            weight_ids.append(new_weight)
         ###################
         #   MAKE INDICES  #
         ###################
-        link_indices = []
-        path_indices = []
-        sequ_indices = []
+        link_indices  = []
+        path_indices  = []
+        sequ_indices  = []
+        sched_indices = []
         segment = 0
-        for p in path_ids:
+        for i in range(len(path_ids)):
+            p=path_ids[i]
             link_indices += p
             path_indices += len(p) * [segment]
             sequ_indices += list(range(len(p)))
+            sched_indices += weight_ids[i] 
             segment += 1
 
-        traffic = sample.get_traffic_matrix()
+        
         # Remove diagonal from matrix
         traffic = traffic[~np.eye(traffic.shape[0], dtype=bool)].reshape(traffic.shape[0], -1)
 
@@ -104,10 +140,17 @@ def generator(data_dir, shuffle = False):
         avg_bw = []
         pkts_gen = []
         delay = []
+        tos = []
+        AvgPkS = []
+        AvgPkL = []
+        
         for i in range(result.shape[0]):
             for j in range(result.shape[1]):
                 flow = traffic[i, j]['Flows'][0]
-                avg_bw.append(flow['AvgBw'])
+                avg_bw.append(flow['AvgBw']*1.E-3)
+                tos.append(float(flow['ToS']))
+                AvgPkS.append(flow['SizeDistParams']['AvgPktSize']*1.E-4)
+                AvgPkL.append(flow['TimeDistParams']['AvgPktsLambda'])
                 pkts_gen.append(flow['PktsGen'])
                 d = result[i, j]['AggInfo']['AvgDelay']
                 delay.append(d)
@@ -115,11 +158,20 @@ def generator(data_dir, shuffle = False):
         n_paths = len(path_ids)
         n_links = max(max(path_ids)) + 1
 
-        yield {"bandwith": avg_bw, "packets": pkts_gen,
+        yield {"bandwith": avg_bw,
+               "packets": pkts_gen,
+               "tos":tos,
+               "AvgPkS": AvgPkS,
+               #"Lambda": AvgPkL,
                "link_capacity": link_capacities,
+               "tx_policies":tx_policies,
+               "rx_policies":rx_policies,
                "links": link_indices,
-               "paths": path_indices, "sequences": sequ_indices,
-               "n_links": n_links, "n_paths": n_paths}, delay
+               "paths": path_indices,
+               "weights": sched_indices,
+               "sequences": sequ_indices,
+               "n_links": n_links,
+               "n_paths": n_paths}, delay
 
 
 def transformation(x, y):
@@ -150,15 +202,31 @@ def input_fn(data_dir, transform=True, repeat=True, shuffle=False):
                              the second one is the target variable.
         """
     ds = tf.data.Dataset.from_generator(lambda: generator(data_dir=data_dir, shuffle=shuffle),
-                                        ({"bandwith": tf.float32, "packets": tf.float32,
-                                          "link_capacity": tf.float32, "links": tf.int64,
-                                          "paths": tf.int64, "sequences": tf.int64,
+                                        ({"bandwith": tf.float32,
+                                          "packets": tf.float32,
+                                          "tos": tf.float32,
+                                          "AvgPkS": tf.float32,
+                                          #"Lambda": tf.float32,
+                                          "link_capacity": tf.float32,
+                                          "tx_policies": tf.float32,
+                                          "rx_policies": tf.float32,
+                                          "links": tf.int64,
+                                          "paths": tf.int64,
+                                          "weights": tf.int64,
+                                          "sequences": tf.int64,
                                           "n_links": tf.int64, "n_paths": tf.int64},
                                         tf.float32),
-                                        ({"bandwith": tf.TensorShape([None]), "packets": tf.TensorShape([None]),
+                                        ({"bandwith": tf.TensorShape([None]),
+                                          "packets": tf.TensorShape([None]),
+                                          "tos": tf.TensorShape([None]),
+                                          "AvgPkS": tf.TensorShape([None]),
+                                          #"Lambda": tf.TensorShape([None]),
                                           "link_capacity": tf.TensorShape([None]),
+                                          "tx_policies": tf.TensorShape([None]),
+                                          "rx_policies": tf.TensorShape([None]),
                                           "links": tf.TensorShape([None]),
                                           "paths": tf.TensorShape([None]),
+                                          "weights": tf.TensorShape([None]),
                                           "sequences": tf.TensorShape([None]),
                                           "n_links": tf.TensorShape([]),
                                           "n_paths": tf.TensorShape([])},

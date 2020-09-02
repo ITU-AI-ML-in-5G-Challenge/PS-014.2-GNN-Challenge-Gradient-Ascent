@@ -1,6 +1,5 @@
 """
-   Copyright 2020 Universitat Politècnica de Catalunya
-
+   Copyright 2020 Universitat Politecnica de Catalunya
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
    You may obtain a copy of the License at
@@ -24,7 +23,6 @@ from read_dataset import input_fn
 from routenet_model import model_fn
 
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.INFO)
-
 
 def train_and_evaluate(train_dir, eval_dir, config, model_dir=None):
     """Trains and evaluates the model.
@@ -185,5 +183,5 @@ if __name__ == '__main__':
     mre = predict_and_save(config['DIRECTORIES']['test'],
                            config['DIRECTORIES']['logs'],
                            '../dataframes/',
-                           'predictions.csv',
+                           'predictions2.csv',
                            config._sections)

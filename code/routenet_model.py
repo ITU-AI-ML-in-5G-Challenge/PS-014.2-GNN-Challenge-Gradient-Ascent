@@ -63,10 +63,12 @@ class RouteNetModel(tf.keras.Model):
                                   kernel_regularizer=tf.keras.regularizers.l2(
                                       float(self.config['HYPERPARAMETERS']['l2'])),
                                   ),
+            #tf.keras.layers.Dropout(rate=.5),
             tf.keras.layers.Dense(int(self.config['HYPERPARAMETERS']['readout_units']),
                                   activation=tf.nn.relu,
                                   kernel_regularizer=tf.keras.regularizers.l2(
                                       float(self.config['HYPERPARAMETERS']['l2']))),
+            #tf.keras.layers.Dropout(rate=.5),
             tf.keras.layers.Dense(output_units,
                                   kernel_regularizer=tf.keras.regularizers.l2(
                                       float(self.config['HYPERPARAMETERS']['l2_2'])))
@@ -88,29 +90,35 @@ class RouteNetModel(tf.keras.Model):
 
         links = f_['links']
         paths = f_['paths']
+        weights = f_['weights']
         seqs = f_['sequences']
 
         # Compute the shape for the  all-zero tensor for link_state
         shape = tf.stack([
             f_['n_links'],
-            int(self.config['HYPERPARAMETERS']['link_state_dim']) - 1
+            int(self.config['HYPERPARAMETERS']['link_state_dim']) - 3
         ], axis=0)
 
         # Initialize the initial hidden state for links
         link_state = tf.concat([
             tf.expand_dims(f_['link_capacity'], axis=1),
+            tf.expand_dims(f_['rx_policies'], axis=1),
+            tf.expand_dims(f_['tx_policies'], axis=1),
             tf.zeros(shape)
         ], axis=1)
 
         # Compute the shape for the  all-zero tensor for path_state
         shape = tf.stack([
             f_['n_paths'],
-            int(self.config['HYPERPARAMETERS']['path_state_dim']) - 1
+            int(self.config['HYPERPARAMETERS']['path_state_dim']) - 4
         ], axis=0)
 
         # Initialize the initial hidden state for paths
         path_state = tf.concat([
             tf.expand_dims(f_['bandwith'], axis=1),
+            tf.expand_dims(f_['tos'], axis=1),
+            tf.expand_dims(f_['packets'], axis=1),
+            tf.expand_dims(f_['AvgPkS'], axis=1),
             tf.zeros(shape)
         ], axis=1)
 
@@ -121,6 +129,7 @@ class RouteNetModel(tf.keras.Model):
             # but the link hidden states
             h_tild = tf.gather(link_state, links)
 
+            #ids = tf.stack([paths, seqs, weights], axis=1)
             ids = tf.stack([paths, seqs], axis=1)
             max_len = tf.reduce_max(seqs) + 1
             shape = tf.stack([
@@ -153,7 +162,7 @@ class RouteNetModel(tf.keras.Model):
 
         # Call the readout ANN and return its predictions
         r = self.readout(path_state, training=training)
-
+        #print(r)
         return r
 
 
@@ -201,7 +210,8 @@ def model_fn(features, labels, mode, params):
     predictions = model(features, training=(mode == tf.estimator.ModeKeys.TRAIN))
 
     predictions = tf.squeeze(predictions)
-
+    #print(predictions)
+    
     # If we are performing predictions.
     if mode == tf.estimator.ModeKeys.PREDICT:
         # Return the predicted values.
