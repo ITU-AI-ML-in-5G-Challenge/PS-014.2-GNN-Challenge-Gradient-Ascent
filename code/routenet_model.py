@@ -90,7 +90,7 @@ class RouteNetModel(tf.keras.Model):
 
         links = f_['links']
         paths = f_['paths']
-        weights = f_['weights']
+        # weights = f_['weights']
         seqs = f_['sequences']
 
         # Compute the shape for the  all-zero tensor for link_state
@@ -102,8 +102,10 @@ class RouteNetModel(tf.keras.Model):
         # Initialize the initial hidden state for links
         link_state = tf.concat([
             tf.expand_dims(f_['link_capacity'], axis=1),
-            tf.expand_dims(f_['rx_policies'], axis=1),
+            #tf.expand_dims(f_['rx_policies'], axis=1),
             tf.expand_dims(f_['tx_policies'], axis=1),
+            tf.expand_dims(f_['tx_weights'], axis=1),
+            #tf.expand_dims(f_['rx_weights'], axis=1),
             tf.zeros(shape)
         ], axis=1)
 
