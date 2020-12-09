@@ -60,18 +60,14 @@ class RouteNetModel(tf.keras.Model):
             tf.keras.layers.Input(shape=int(self.config['HYPERPARAMETERS']['path_state_dim'])),
             tf.keras.layers.Dense(int(self.config['HYPERPARAMETERS']['readout_units']),
                                   activation=tf.nn.selu,
-                                  kernel_regularizer=tf.keras.regularizers.l2(
-                                      float(self.config['HYPERPARAMETERS']['l2'])),
                                   ),
-            #tf.keras.layers.Dropout(rate=.5),
             tf.keras.layers.Dense(int(self.config['HYPERPARAMETERS']['readout_units']),
-                                  activation=tf.nn.relu,
-                                  kernel_regularizer=tf.keras.regularizers.l2(
-                                      float(self.config['HYPERPARAMETERS']['l2']))),
-            #tf.keras.layers.Dropout(rate=.5),
+                                  activation=tf.nn.selu,
+                                  ),
             tf.keras.layers.Dense(output_units,
                                   kernel_regularizer=tf.keras.regularizers.l2(
-                                      float(self.config['HYPERPARAMETERS']['l2_2'])))
+                                      float(self.config['HYPERPARAMETERS']['l2_2']))
+                                  )
         ])
 
     def call(self, inputs, training=False):
@@ -102,10 +98,8 @@ class RouteNetModel(tf.keras.Model):
         # Initialize the initial hidden state for links
         link_state = tf.concat([
             tf.expand_dims(f_['link_capacity'], axis=1),
-            #tf.expand_dims(f_['rx_policies'], axis=1),
             tf.expand_dims(f_['tx_policies'], axis=1),
             tf.expand_dims(f_['tx_weights'], axis=1),
-            #tf.expand_dims(f_['rx_weights'], axis=1),
             tf.zeros(shape)
         ], axis=1)
 

@@ -21,14 +21,15 @@ from datanetAPI import DatanetAPI
 
 POLICIES = np.array(['WFQ', 'SP', 'DRR'])
 WEIGHTS  = np.array(['90,5,5','80,10,10','75,25,5','70,20,10','65,25,10','60,30,10','50,40,10','33.3,33.3,33.3'])
+#when reading the evaluation data-set (i.e., generating the prediction) replace the line above by the line below!
+#WEIGHTS  = np.array(['90,5,5','80,10,10','75,25,5','70,20,10','65,25,10','60,30,10','50,40,10','33.3,33.3,33.4'])
 
 def policy(graph, node):
     weight=-8
     pol =   np.where(POLICIES==graph.nodes[node]['schedulingPolicy'])[0][0]
-    #weight = graph.nodes[node]['schedulingWeights'].split(',') if (pol!=1) else  [200.,200.,200.]
     if (pol!=1):
         weight=np.where(WEIGHTS==graph.nodes[node]['schedulingWeights'])[0][0]+1
-    return (pol, weight/8.)   # weight is -1 for SP, btw  ]0.,1.] otherwise
+    return (pol, weight/8.)   #for 'SP' is always -1, otherwise between ]0.,1.]
 
 def generator(data_dir, shuffle = False):
     """This function uses the provided API to read the data and returns
@@ -71,29 +72,18 @@ def generator(data_dir, shuffle = False):
                     
         cap_mat         = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
         tx_queue_mat    = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
-        rx_queue_mat    = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
         tx_weight_mat   = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
-        rx_weight_mat   = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None) 
-        #tx_port_mat   = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
-        tx_sched_mat = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
-        rx_sched_mat = np.full((g.number_of_nodes(), g.number_of_nodes()), fill_value=None)
         
         for node in range(g.number_of_nodes()):
             for adj in g[node]:
-                cap_mat[node, adj] = g[node][adj][0]['bandwidth']*1.E-5  #BEWARE : SCALING, should prolly go into transormation fkt  !
-                #tx_port_mat[node, adj] = G[node][adj][0]['port']
+                cap_mat[node, adj] = g[node][adj][0]['bandwidth']*1.E-5  #BEWARE : SCALING  !
                 tx_queue_mat[node, adj] = policy(g,node)[0]
-                #rx_queue_mat[node, adj] = policy(g,adj)[0]
                 tx_weight_mat[node, adj] = policy(g,node)[1]
-                #rx_weight_mat[node, adj] = policy(g,adj)[1]
 
         links = np.where(np.ravel(cap_mat) != None)[0].tolist()
         link_capacities   = (np.ravel(cap_mat)[links]).tolist()
         tx_policies       = (np.ravel(tx_queue_mat)[links]).tolist()
-        #rx_policies       = (np.ravel(rx_queue_mat)[links]).tolist()
-        # tx_ports
         tx_weights         = (np.ravel(tx_weight_mat)[links]).tolist()
-        #rx_weights         = (np.ravel(rx_weight_mat)[links]).tolist()
         
         ids = list(range(len(links)))
         links_id = dict(zip(links, ids))
@@ -102,35 +92,25 @@ def generator(data_dir, shuffle = False):
         weight_ids = []
         pol_ids = []
         for path in paths:
-            #tos = int(traffic[path[0],path[-1]]['Flows'][0]['ToS'])
             new_path = []
-            #new_weight = []
             for i in range(0, len(path) - 1):
                 src = path[i]
                 dst = path[i + 1]
-                #tx_pol    = tx_queue_mat[src][dst]
-                #tx_weight = int(float(tx_weight_mat[src][dst][tos]))
-                #if  tx_pol==1 :
-                #    tx_weight -= tos*100                 
                 new_path.append(links_id[src * nodes + dst])
-                #new_weight.append(tx_weight)
 
             path_ids.append(new_path)
-            #weight_ids.append(new_weight)
         ###################
         #   MAKE INDICES  #
         ###################
         link_indices  = []
         path_indices  = []
         sequ_indices  = []
-        #sched_indices = []
         segment = 0
         for i in range(len(path_ids)):
             p=path_ids[i]
             link_indices += p
             path_indices += len(p) * [segment]
             sequ_indices += list(range(len(p)))
-            #sched_indices += weight_ids[i] 
             segment += 1
 
         
@@ -146,41 +126,13 @@ def generator(data_dir, shuffle = False):
         delay = []
         tos = []
         AvgPkS = []
-        AvgPkL = []
-
-        # traffic[i,j]['Flows'][0]['TimeDist']    #   'Flows': [{'TimeDist': <TimeDist.EXPONENTIAL_T: 0>,
-        # traffic[i,j]['Flows'][0]['TimeDistParams']['ExpMaxFactor']
-        # traffic[i,j]['Flows'][0]['TimeDistParams']['SizeDist'] <SizeDist.BINOMIAL_S: 2>,
-        # traffic[i,j]['Flows'][0]['TimeDistParams']['SizeDistParams']['PktSize1']
-        # traffic[i,j]['Flows'][0]['TimeDistParams']['SizeDistParams']['PktSize2'] 
-
-        #result[i,j]                                                                                                                
-        #{'AggInfo': {'PktsDrop': 0.0,
-        #'AvgDelay': 0.192399,
-        #'AvgLnDelay': -2.02633,
-        #'p10': 0.03,
-        #'p20': 0.03,
-        #'p50': 0.169999,
-        #'p80': 0.295535,
-        #'p90': 0.390443,
-        #'Jitter': 0.024241},
-        #'Flows': [{'PktsDrop': 0.0,
-        #  'AvgDelay': 0.192399,
-        #  'AvgLnDelay': -2.02633,
-        #  'p10': 0.03,
-        #  'p20': 0.03,
-        #  'p50': 0.169999,
-        #  'p80': 0.295535,
-        #  'p90': 0.390443,
-        #  'Jitter': 0.024241}]}
 
         for i in range(result.shape[0]):
             for j in range(result.shape[1]):
                 flow = traffic[i, j]['Flows'][0]
-                avg_bw.append(flow['AvgBw']*1.E-3) #SCALING !
+                avg_bw.append(flow['AvgBw']*1.E-3)
                 tos.append(float(flow['ToS']))
-                AvgPkS.append(flow['SizeDistParams']['AvgPktSize']*1.E-4) #SCALING !
-                AvgPkL.append(flow['TimeDistParams']['AvgPktsLambda'])
+                AvgPkS.append(flow['SizeDistParams']['AvgPktSize']*1.E-4)
                 pkts_gen.append(flow['PktsGen'])
                 d = result[i, j]['AggInfo']['AvgDelay']
                 delay.append(d)
@@ -193,15 +145,11 @@ def generator(data_dir, shuffle = False):
                "packets": pkts_gen,
                "tos":tos,
                "AvgPkS": AvgPkS,
-               #"Lambda": AvgPkL,
                "link_capacity": link_capacities,
                "tx_policies":tx_policies,
-               #"rx_policies":rx_policies,
                "tx_weights":tx_weights,
-               #"rx_weights":rx_weights,
                "links": link_indices,
                "paths": path_indices,
-               #"weights": sched_indices,
                "sequences": sequ_indices,
                "n_links": n_links,
                "n_paths": n_paths}, delay
@@ -239,15 +187,11 @@ def input_fn(data_dir, transform=True, repeat=True, shuffle=False):
                                           "packets": tf.float32,
                                           "tos": tf.float32,
                                           "AvgPkS": tf.float32,
-                                          #"Lambda": tf.float32,
                                           "link_capacity": tf.float32,
                                           "tx_policies": tf.float32,
-                                          #"rx_policies": tf.float32,
                                           "tx_weights": tf.float32,
-                                          #"rx_weights": tf.float32,
                                           "links": tf.int64,
                                           "paths": tf.int64,
-                                          #"weights": tf.int64,
                                           "sequences": tf.int64,
                                           "n_links": tf.int64, "n_paths": tf.int64},
                                         tf.float32),
@@ -255,15 +199,11 @@ def input_fn(data_dir, transform=True, repeat=True, shuffle=False):
                                           "packets": tf.TensorShape([None]),
                                           "tos": tf.TensorShape([None]),
                                           "AvgPkS": tf.TensorShape([None]),
-                                          #"Lambda": tf.TensorShape([None]),
                                           "link_capacity": tf.TensorShape([None]),
                                           "tx_policies": tf.TensorShape([None]),
-                                          #"rx_policies": tf.TensorShape([None]),
                                           "tx_weights": tf.TensorShape([None]),
-                                          #"rx_weights": tf.TensorShape([None]),
                                           "links": tf.TensorShape([None]),
                                           "paths": tf.TensorShape([None]),
-                                          #"weights": tf.TensorShape([None]),
                                           "sequences": tf.TensorShape([None]),
                                           "n_links": tf.TensorShape([]),
                                           "n_paths": tf.TensorShape([])},
