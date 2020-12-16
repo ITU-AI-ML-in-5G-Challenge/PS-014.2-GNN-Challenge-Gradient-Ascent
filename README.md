@@ -1,3 +1,79 @@
+# Gradient Ascent's solution
+
+This is an extension of the existing version of RouteNet. The GNN architecture is largely unchanged. Specifically, the
+message passing and GRU cells to realize path and link updates were kept, and
+three “dense” readout layers were used, like in the original. However, the number
+of message passing iterations was reduced from t=8 to t=4.
+Further, the dimensions of link and path hidden states, as well as the number
+of readout nodes were substantially increased (see Table below).
+L2 regularization was only used in the third and final readout layer (contrary
+to the original RouteNet, which uses L2 regularization in all three dense layers).
+Like the original RouteNet, we used the Adam optimizer with the suggested
+parameters.
+
+|link state dim | path state dim |   t   | readout units|  l2  |  l2_2 |
+|:-------------:|:--------------:|:-----:|:------------:|:----:|:-----:|
+|128            |    128         |   4   |    512       |  n.a.| 0.0.1 |
+
+
+
+## Input features
+
+While the general structure of RouteNet’s model was kept, we added various input
+features (see below).
+Parameters with large numerical values were mapped to more numerically benign values
+using a simple scaling transformation. String parameters were mapped
+to floating point numbers.
+
+### Additional per-link features
+
+1. The link capacity:
+This parameter was scaled by a factor 10<sup>−5</sup>.
+
+2. The scheduling policy of the transmitting node:
+This string-valued parameter was mapped to a floating point number:
+
+|Scheduling Policy (string value) | Numerical value |
+|---------------------------------|-----------------|
+|WFQ                              |    0            |
+|SP                               |    1            |
+|DRR                              |    2            |
+
+3. The weight profile of the transmitting node:
+This string-valued parameter was mapped to a floating point number:
+
+|Weight profile (string value) | Numerical value |
+|------------------------------|-----------------|
+|90,5,5                        | 0.125           |
+|80,10,10                      | 0.25            |
+|75,25,5                       | 0.375           |
+|70,20,10                      | 0.5             |
+|65,25,10                      | 0.625           |
+|60,30,10                      | 0.75            |
+|50,40,10                      | 0.875           |
+|33.3,33.3,33.3                | 1.0             |
+
+
+### Additional per-path features
+
+1. The average bandwidth:
+This parameter was scaled by a factor 10<sup>−3</sup>.
+
+2. The Type Of Service (TOS).
+
+3. The average packet size:
+This parameter was scaled by a factor 10<sup>−4</sup>.
+
+4. The PktGen-parameter, which we believe reflects packet rate
+
+## Training
+The model was trained on an Nvidia Tesla V100 using the datasets provided here <https://challenge.bnn.upc.edu/dataset>.
+We used 1.2M training steps, after which the validation loss had clearly converged.
+The training in this setting took roughly 15 hours.
+
+
+
+
 # RouteNet - Graph Neural Networking challenge 2020
 
 #### Organized as part of "ITU AI/ML in 5G challenge"
